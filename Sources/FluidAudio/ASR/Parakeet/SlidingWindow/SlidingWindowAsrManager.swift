@@ -453,7 +453,7 @@ public actor SlidingWindowAsrManager {
                     previousTokenTimestamps: accumulatedTokenTimestamps,
                     globalFrameOffset: windowStartSample / ASRConstants.samplesPerEncoderFrame,
                     isLastChunk: isLastChunk,
-                    language: config.language
+                    languages: config.language.map { [$0] } ?? []
                 )
             else { return }
 

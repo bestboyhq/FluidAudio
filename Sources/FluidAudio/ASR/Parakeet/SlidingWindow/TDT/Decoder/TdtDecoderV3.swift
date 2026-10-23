@@ -110,7 +110,7 @@ internal struct TdtDecoderV3: Sendable {
         contextFrameAdjustment: Int = 0,
         isLastChunk: Bool = false,
         globalFrameOffset: Int = 0,
-        language: Language? = nil,
+        languages: Set<Language> = [],
         vocabulary: [Int: String]? = nil,
         punctuationTokenIds: Set<Int>? = nil,
         emitTokensAfterGlobalFrame: Int? = nil,
@@ -124,10 +124,10 @@ internal struct TdtDecoderV3: Sendable {
         // Use encoder hidden size from config (512 for 110m, 1024 for 0.6B)
         let expectedEncoderHidden = config.encoderHiddenSize
 
-        // Script-filtering consumes top-K; skip the extraction when the caller
+        // Language filtering consumes top-K; skip the extraction when the caller
         // didn't provide a language (default path), so v3 joint runs don't pay
         // for K-length array allocations they'll never use.
-        let needsTopK = language != nil
+        let needsTopK = !languages.isEmpty
 
         // Build a stride-aware view so we can access encoder frames without extra copies
         let encoderFrames = try EncoderFrameView(
@@ -287,11 +287,11 @@ internal struct TdtDecoderV3: Sendable {
                 score: &score,
                 topKIds: decision.topKIds,
                 topKLogits: decision.topKLogits,
-                language: language,
+                languages: languages,
                 vocabulary: vocabulary,
                 blankId: blankId
             )
-            if Self.englishBlocklistApplies(to: language),
+            if Self.englishBlocklistApplies(to: languages),
                 let ids = decision.topKIds, let logits = decision.topKLogits, let vocab = vocabulary
             {
                 Self.applyEnglishBlocklist(
@@ -374,11 +374,11 @@ internal struct TdtDecoderV3: Sendable {
                     score: &score,
                     topKIds: innerDecision.topKIds,
                     topKLogits: innerDecision.topKLogits,
-                    language: language,
+                    languages: languages,
                     vocabulary: vocabulary,
                     blankId: blankId
                 )
-                if Self.englishBlocklistApplies(to: language),
+                if Self.englishBlocklistApplies(to: languages),
                     let ids = innerDecision.topKIds, let logits = innerDecision.topKLogits,
                     let vocab = vocabulary
                 {
@@ -628,16 +628,19 @@ internal struct TdtDecoderV3: Sendable {
     /// prose (#630), and the same ids are core vocabulary elsewhere — Dutch
     /// ' we'/' was', German ' so', Italian ' so' — so running it for every
     /// non-English Latin language corrupts clean speech (#840).
-    static func englishBlocklistApplies(to language: Language?) -> Bool {
-        language == .french
+    /// It applies only when French is the one language: a caller that also
+    /// expects English wants its words kept.
+    static func englishBlocklistApplies(to languages: Set<Language>) -> Bool {
+        languages == [.french]
     }
 
     /// When the target language is French and the winning token is in the
     /// English-exclusive blocklist, replace it with the highest-logit top-K
     /// token that is not in the blocklist.
     ///
-    /// This runs AFTER `tokenLanguageFilter` (which only distinguishes
-    /// Latin from Cyrillic and leaves English/French ambiguous). It targets
+    /// This runs AFTER `tokenLanguageFilter` (which keeps tokens to the
+    /// letters of the languages and leaves English/French ambiguous, since
+    /// French letters include all of English's). It targets
     /// the spontaneous-speech translation phenomenon where the model falls back
     /// to its English prior on acoustically ambiguous frames.
     static func applyEnglishBlocklist(
@@ -675,7 +678,7 @@ internal struct TdtDecoderV3: Sendable {
     }
 
     /// Replace `label`/`score` with the best right-language top-K candidate
-    /// when the joint's top-1 token is in the wrong language for `language`.
+    /// when the joint's top-1 token is written in none of `languages`' letters.
     /// No-op when inputs are missing or the prediction is already right.
     ///
     /// Blanks are excluded from replacement — substituting silence via top-K
@@ -686,23 +689,23 @@ internal struct TdtDecoderV3: Sendable {
         score: inout Float,
         topKIds: [Int]?,
         topKLogits: [Float]?,
-        language: Language?,
+        languages: Set<Language>,
         vocabulary: [Int: String]?,
         blankId: Int
     ) {
         guard label != blankId,
-            let language = language,
+            !languages.isEmpty,
             let vocab = vocabulary,
             let topKIds = topKIds,
             let topKLogits = topKLogits,
             !topKIds.isEmpty,
             let tokenText = vocab[label],
-            !TokenLanguageFilter.matches(tokenText, script: language.script),
+            !TokenLanguageFilter.matches(tokenText, languages: languages),
             let filtered = TokenLanguageFilter.filterTopK(
                 topKIds: topKIds,
                 topKLogits: topKLogits,
                 vocabulary: vocab,
-                preferredScript: language.script
+                languages: languages
             )
         else { return }
 

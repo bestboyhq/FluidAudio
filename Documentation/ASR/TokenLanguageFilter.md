@@ -5,9 +5,12 @@
 Parakeet TDT v3 is a multilingual model with a single shared SentencePiece
 vocabulary spanning Latin and Cyrillic alphabets. On short utterances with
 ambiguous audio, the joint network can emit wrong-language tokens — e.g.
-Russian-alphabet tokens while transcribing Polish (issue #512).
-`TokenLanguageFilter` picks the highest-logit top-K candidate whose alphabet
-matches the caller-provided `language`, suppressing wrong-language leakage
+Russian-alphabet tokens while transcribing Polish (issue #512). Where the
+audio is unclear (noise, a far mic), it also drifts into another language of
+the same alphabet: FLEURS Polish under pink noise came out with Czech
+`pořád`, Hungarian `részünk`, and whole Lithuanian sentences.
+`TokenLanguageFilter` picks the highest-logit top-K candidate written in the
+letters of the caller's languages, suppressing wrong-language leakage
 without retraining the model.
 
 Relevant code:
@@ -52,7 +55,11 @@ public enum Script: Sendable {
 ```
 
 `Language.script` returns the writing script. Pass `language:` on the
-transcribe APIs to enable filtering; omit it to disable.
+transcribe APIs to enable filtering; omit it to disable. For audio in any of
+several languages, pass the set to
+`AsrManager.transcribe(_:decoderState:languages:)`: a token passes when it is
+written in the letters of any of them, so `[.polish, .german]` keeps both `ł`
+and `ß`, and `[.polish, .russian]` keeps both alphabets.
 
 ## Algorithm
 
@@ -61,7 +68,8 @@ The filter:
 
 1. Walks the top-K list (does **not** assume CoreML returns it sorted).
 2. Looks up each token's text in the vocabulary.
-3. Runs `matches(tokenText, script:)` — a per-character Unicode range check.
+3. Runs `matches(tokenText, languages:)`: the script range check below,
+   then, for a Latin-script language, the letter check.
 4. Keeps the highest-logit candidate that passes.
 5. Returns that token plus a top-K softmax probability.
 
@@ -83,6 +91,20 @@ decoder falls back to its unfiltered argmax.
 - Cyrillic block (`0x0400`–`0x04FF`)
 - Script-neutral ASCII (digits, punctuation, whitespace) — but **ASCII
   letters `A–Z`/`a–z` are explicitly rejected**
+
+### Letter rules
+
+Each Latin-script language lists the letters beyond ASCII it writes
+(`Language.letters`): Polish `ąćęłńóśźż`, German `äöüß`, Czech
+`áčďéěíňóřšťúůýž`, English none. A token passes for that language when every
+letter in it, lowercased, is ASCII or one of those. ASCII letters always pass,
+since every Latin-script language writes English loanwords and names. So the
+Polish filter keeps `deploy` and drops Czech `ř` and Hungarian `ő`. Cyrillic
+and Greek languages keep their whole script.
+
+Measured on FLEURS Polish under pink noise with `[.polish, .english]`: every
+other-language letter was gone, at the same word error rate. The drifted
+words were wrong either way; they now come out in Polish letters.
 
 ### Asymmetric guards
 
@@ -132,18 +154,16 @@ probability.
 
 ## Extending
 
-The filter currently partitions by Unicode script only. Per-language token
-allowlists (e.g. distinguishing Polish from Czech within the Latin script)
-could plug in at the `matches` call site without changing the decoder API.
-
-Adding a new language: extend `Language` and its `script` mapping. If the
-new language introduces a third script, extend `Script` and add a
-corresponding `matches` case.
+Adding a new language: extend `Language`, its `script` mapping, and for a
+Latin-script language its `letters`. If the new language introduces a new
+script, extend `Script` and add a corresponding `matches` case.
 
 ## Testing
 
-40 unit tests in `TokenLanguageFilterTests` cover:
+47 unit tests in `TokenLanguageFilterTests` cover:
 - Every supported language's characteristic diacritics
+- Per-language letters: Polish keeps `ł` and English loanwords, and drops
+  Czech `ř`; several languages keep the letters of each
 - Cross-script rejection (Latin `"cat"` must fail Cyrillic, Cyrillic `"кот"`
   must fail Latin)
 - Boundary marker stripping and neutral-token behavior

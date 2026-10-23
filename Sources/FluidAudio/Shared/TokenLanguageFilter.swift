@@ -49,6 +49,37 @@ public enum Language: String, Sendable, CaseIterable {
             return .greek
         }
     }
+
+    /// The letters beyond ASCII this language writes, lowercase; `nil` where
+    /// every letter of its script is its own. Every Latin-script language also
+    /// writes ASCII letters (loanwords, names, English), so Polish keeps
+    /// English words and English keeps no others.
+    var letters: Set<Character>? {
+        switch self {
+        case .english: return []
+        case .spanish: return Set("áéíóúüñ")
+        case .french: return Set("àâæçéèêëîïôœùûüÿ")
+        case .german: return Set("äöüß")
+        case .italian: return Set("àèéìíîòóùú")
+        case .portuguese: return Set("áâãàçéêíóôõúü")
+        case .romanian: return Set("ăâîșțşţ")
+        case .dutch: return Set("áéíóúàèëïöü")
+        case .danish: return Set("æøåé")
+        case .swedish: return Set("åäöé")
+        case .finnish: return Set("åäöšž")
+        case .hungarian: return Set("áéíóöőúüű")
+        case .estonian: return Set("äöõüšž")
+        case .latvian: return Set("āčēģīķļņšūž")
+        case .lithuanian: return Set("ąčęėįšųūž")
+        case .maltese: return Set("àċèġħìòùż")
+        case .polish: return Set("ąćęłńóśźż")
+        case .czech: return Set("áčďéěíňóřšťúůýž")
+        case .slovak: return Set("áäčďéíĺľňóôŕšťúýž")
+        case .slovenian: return Set("čšž")
+        case .croatian, .bosnian: return Set("čćđšž")
+        case .russian, .ukrainian, .belarusian, .bulgarian, .serbian, .greek: return nil
+        }
+    }
 }
 
 /// Writing script categories. Latin and Cyrillic letter ranges are
@@ -59,13 +90,13 @@ public enum Script: Sendable {
     case greek
 }
 
-/// Filters ASR decoder tokens against the target language's alphabet.
+/// Filters ASR decoder tokens against the target languages' alphabets.
 ///
 /// Used by the v3 TDT decoder to stop the joint network from emitting
-/// wrong-language tokens — e.g. Cyrillic letters while transcribing Polish
-/// (issue #512). Partitions by Unicode script (Latin/Cyrillic) only; a
-/// per-language token allowlist (Polish vs Czech etc.) could plug in here
-/// later without changing the call-site API.
+/// wrong-language tokens: Cyrillic letters while transcribing Polish
+/// (issue #512), and within the Latin script, Czech `ř` or Hungarian `ő`
+/// where the audio is unclear and the model drifts into a language it
+/// was never asked for.
 internal struct TokenLanguageFilter: Sendable {
 
     /// SentencePiece word-boundary marker (▁, U+2581). Stripped before script
@@ -133,7 +164,20 @@ internal struct TokenLanguageFilter: Sendable {
         }
     }
 
-    /// Filter top-K candidates by script and return the highest-logit match.
+    /// Whether `text` is written in the letters of any of `languages`: its
+    /// script, and for a Latin-script language, ASCII and that language's own
+    /// letters.
+    static func matches(_ text: String, languages: Set<Language>) -> Bool {
+        languages.contains { matches(text, language: $0) }
+    }
+
+    static func matches(_ text: String, language: Language) -> Bool {
+        guard matches(text, script: language.script) else { return false }
+        guard let letters = language.letters else { return true }
+        return text.lowercased().allSatisfy { !$0.isLetter || $0.isASCII || letters.contains($0) }
+    }
+
+    /// Filter top-K candidates by language and return the highest-logit match.
     ///
     /// Returned probability is softmax **over the top-K logits only**, not the
     /// full vocabulary. It is systematically larger than a full-vocab softmax
@@ -144,7 +188,7 @@ internal struct TokenLanguageFilter: Sendable {
         topKIds: [Int],
         topKLogits: [Float],
         vocabulary: [Int: String],
-        preferredScript: Script
+        languages: Set<Language>
     ) -> (tokenId: Int, probability: Float)? {
         let count = min(topKIds.count, topKLogits.count)
         guard count > 0 else { return nil }
@@ -158,7 +202,7 @@ internal struct TokenLanguageFilter: Sendable {
         for idx in 0..<count {
             let tokenId = topKIds[idx]
             guard let tokenText = vocabulary[tokenId] else { continue }
-            guard matches(tokenText, script: preferredScript) else { continue }
+            guard matches(tokenText, languages: languages) else { continue }
 
             let logit = topKLogits[idx]
             if bestIdx < 0 || logit > bestLogit {

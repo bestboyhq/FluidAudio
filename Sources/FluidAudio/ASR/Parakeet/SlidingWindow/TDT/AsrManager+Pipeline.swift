@@ -94,7 +94,7 @@ extension AsrManager {
         contextFrameAdjustment: Int = 0,
         isLastChunk: Bool = false,
         globalFrameOffset: Int = 0,
-        language: Language? = nil,
+        languages: Set<Language> = [],
         emitTokensAfterGlobalFrame: Int? = nil,
         initialTimeIndexOverride: Int? = nil
     ) async throws -> (hypothesis: TdtHypothesis, encoderSequenceLength: Int) {
@@ -112,7 +112,7 @@ extension AsrManager {
             paddedAudio, originalLength: originalLength, actualAudioFrames: actualAudioFrames,
             lengthPolicy: [], decoderState: &decoderState,
             contextFrameAdjustment: contextFrameAdjustment, isLastChunk: isLastChunk,
-            globalFrameOffset: globalFrameOffset, language: language,
+            globalFrameOffset: globalFrameOffset, languages: languages,
             emitTokensAfterGlobalFrame: emitTokensAfterGlobalFrame,
             initialTimeIndexOverride: initialTimeIndexOverride)
         guard Self.isWholeWindowBlank(result.hypothesis), let entryState else { return result }
@@ -123,7 +123,7 @@ extension AsrManager {
                 paddedAudio, originalLength: originalLength, actualAudioFrames: actualAudioFrames,
                 lengthPolicy: policy, decoderState: &retryState,
                 contextFrameAdjustment: contextFrameAdjustment, isLastChunk: isLastChunk,
-                globalFrameOffset: globalFrameOffset, language: language,
+                globalFrameOffset: globalFrameOffset, languages: languages,
                 emitTokensAfterGlobalFrame: emitTokensAfterGlobalFrame,
                 initialTimeIndexOverride: initialTimeIndexOverride)
             guard Self.recoveryIsCredible(retry.hypothesis) else { continue }
@@ -145,7 +145,7 @@ extension AsrManager {
         contextFrameAdjustment: Int,
         isLastChunk: Bool,
         globalFrameOffset: Int,
-        language: Language?,
+        languages: Set<Language>,
         emitTokensAfterGlobalFrame: Int?,
         initialTimeIndexOverride: Int?
     ) async throws -> (hypothesis: TdtHypothesis, encoderSequenceLength: Int) {
@@ -224,7 +224,7 @@ extension AsrManager {
                 contextFrameAdjustment: contextFrameAdjustment,
                 isLastChunk: isLastChunk,
                 globalFrameOffset: globalFrameOffset,
-                language: language,
+                languages: languages,
                 emitTokensAfterGlobalFrame: emitTokensAfterGlobalFrame,
                 initialTimeIndexOverride: initialTimeIndexOverride
             )

@@ -103,19 +103,21 @@ final class EnglishBlocklistTests: XCTestCase {
     }
 
     func testBlocklistAppliesOnlyToFrench() {
-        XCTAssertTrue(TdtDecoderV3.englishBlocklistApplies(to: .french))
+        XCTAssertTrue(TdtDecoderV3.englishBlocklistApplies(to: [.french]))
 
         // #840: the French-tuned blocklist corrupts other Latin-script
         // languages whose core vocabulary overlaps the blocked ids.
-        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: .german))
-        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: .dutch))
-        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: .italian))
-        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: .polish))
-        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: .spanish))
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: [.german]))
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: [.dutch]))
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: [.italian]))
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: [.polish]))
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: [.spanish]))
 
-        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: .english))
-        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: .russian))
-        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: nil))
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: [.english]))
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: [.russian]))
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: []))
+        // A caller that also expects English wants its English words kept.
+        XCTAssertFalse(TdtDecoderV3.englishBlocklistApplies(to: [.french, .english]))
     }
 
     func testBlocklistContainsExpectedTokens() {
