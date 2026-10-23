@@ -222,7 +222,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNotNil(result)
@@ -252,7 +252,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNotNil(result)
@@ -272,7 +272,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNotNil(result)
@@ -299,7 +299,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNil(result)
@@ -320,7 +320,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNotNil(result)
@@ -349,7 +349,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNotNil(result)
@@ -361,7 +361,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: [],
             topKLogits: [],
             vocabulary: [:],
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNil(result)
@@ -382,7 +382,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         // Should find ID=2 ("hello") within the common prefix of length 2.
@@ -406,7 +406,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNotNil(result)
@@ -430,7 +430,7 @@ final class TokenLanguageFilterTests: XCTestCase {
             topKIds: topKIds,
             topKLogits: topKLogits,
             vocabulary: vocabulary,
-            preferredScript: .latin
+            languages: [.polish]
         )
 
         XCTAssertNotNil(result)
@@ -441,6 +441,74 @@ final class TokenLanguageFilterTests: XCTestCase {
             XCTAssertLessThan(probability, 1.0)
             XCTAssertEqual(probability, 0.3156, accuracy: 0.01)
         }
+    }
+
+    // MARK: - Per-Language Letter Tests
+
+    func testLanguageKeepsItsOwnLettersAndAscii() {
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}przyszłość", language: .polish))
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}ŻÓŁW", language: .polish))
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}deploy", language: .polish))  // English loanword
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}Straße", language: .german))
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}hello, world!", language: .english))
+    }
+
+    func testLanguageRejectsOtherLatinLanguagesLetters() {
+        // Drift seen on unclear Polish audio: Czech, Hungarian, Lithuanian words.
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}pořád", language: .polish))  // Czech ř, á
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}részünk", language: .polish))  // Hungarian é, ü
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}rytmų", language: .polish))  // Lithuanian ų
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}że", language: .czech))  // Polish ż
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}niño", language: .english))
+    }
+
+    func testLanguageLettersInDecomposedForm() {
+        XCTAssertTrue(TokenLanguageFilter.matches("e\u{0301}", language: .spanish))  // é
+        XCTAssertFalse(TokenLanguageFilter.matches("r\u{030C}", language: .polish))  // ř
+    }
+
+    func testCyrillicAndGreekLanguagesKeepTheirWholeScript() {
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}привет", language: .russian))
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}їжак", language: .russian))
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}hello", language: .russian))
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}γεια", language: .greek))
+    }
+
+    func testEveryLatinLanguageHasLetters() {
+        for language in Language.allCases {
+            XCTAssertEqual(language.letters == nil, language.script != .latin, language.rawValue)
+            for letter in language.letters ?? [] {
+                XCTAssertEqual(String(letter), String(letter).lowercased(), language.rawValue)
+                XCTAssertTrue(TokenLanguageFilter.matches(String(letter), script: .latin), language.rawValue)
+            }
+        }
+    }
+
+    func testSeveralLanguagesKeepTheLettersOfEach() {
+        let polishGerman: Set<Language> = [.polish, .german]
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}łódź", languages: polishGerman))
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}schön", languages: polishGerman))
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}pořád", languages: polishGerman))
+
+        // Two scripts: either one's letters pass.
+        let polishRussian: Set<Language> = [.polish, .russian]
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}tak", languages: polishRussian))
+        XCTAssertTrue(TokenLanguageFilter.matches("\u{2581}так", languages: polishRussian))
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}részünk", languages: polishRussian))
+
+        XCTAssertFalse(TokenLanguageFilter.matches("\u{2581}tak", languages: []))
+    }
+
+    func testFilterTopKSkipsAnotherLatinLanguage() {
+        // Top-1 is a Czech spelling, top-2 the Polish one.
+        let result = TokenLanguageFilter.filterTopK(
+            topKIds: [1, 2, 3],
+            topKLogits: [0.9, 0.6, 0.4],
+            vocabulary: [1: "\u{2581}ře", 2: "\u{2581}rze", 3: "\u{2581}ру"],
+            languages: [.polish, .english]
+        )
+
+        XCTAssertEqual(result?.tokenId, 2)
     }
 
     // MARK: - Language Enum Tests

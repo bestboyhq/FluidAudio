@@ -50,7 +50,7 @@ extension ChunkProcessor {
         modelVersion: AsrModelVersion?,
         startTime: Date,
         progressHandler: ((Double) async -> Void)?,
-        language: Language?
+        languages: Set<Language>
     ) async throws -> ASRResult {
         let config = DualDecodeArbitrationConfig()
         let logger = AppLogger(category: "ChunkProcessor")
@@ -115,7 +115,7 @@ extension ChunkProcessor {
             using: worker,
             decoderLayers: decoderLayers,
             maxModelSamples: maxModelSamples,
-            language: language
+            languages: languages
         )
         chunkOutputs.append(chunk0Tokens)
         await reportProgress(through: 0)
@@ -145,7 +145,7 @@ extension ChunkProcessor {
                     using: worker,
                     decoderLayers: decoderLayers,
                     maxModelSamples: maxModelSamples,
-                    language: language
+                    languages: languages
                 )
                 pathAProbeOutputs.append(pathATokens)
                 for token in pathATokens { pathAConfSum += token.confidence }
@@ -170,7 +170,7 @@ extension ChunkProcessor {
                             using: worker,
                             decoderLayers: decoderLayers,
                             maxModelSamples: maxModelSamples,
-                            language: language
+                            languages: languages
                         )
                         pathBProbeOutputs.append(pathBTokens)
                         for token in pathBTokens { pathBConfSum += token.confidence }
@@ -198,7 +198,7 @@ extension ChunkProcessor {
                             using: worker,
                             decoderLayers: decoderLayers,
                             maxModelSamples: maxModelSamples,
-                            language: language
+                            languages: languages
                         )
                         pathCProbeOutputs.append(pathCTokens)
                         for token in pathCTokens { pathCConfSum += token.confidence }
@@ -340,7 +340,7 @@ extension ChunkProcessor {
                     using: worker,
                     decoderLayers: decoderLayers,
                     maxModelSamples: maxModelSamples,
-                    language: language
+                    languages: languages
                 )
                 chunkOutputs.append(tokens)
                 await reportProgress(through: chunkIndex)
@@ -460,7 +460,7 @@ extension ChunkProcessor {
         using manager: AsrManager,
         decoderLayers: Int,
         maxModelSamples: Int,
-        language: Language?
+        languages: Set<Language>
     ) async throws -> [TokenWindow] {
         let layout = dualWindowLayout(
             chunkStart: chunkStart, chunkSamples: chunkSamples,
@@ -487,7 +487,7 @@ extension ChunkProcessor {
                 using: manager,
                 decoderState: &decoderState,
                 maxModelSamples: maxModelSamples,
-                language: language,
+                languages: languages,
                 emitTokensAfterFrame: emitTokensAfterFrame,
                 initialTimeIndexOverride: emitTokensAfterFrame == nil ? nil : 0
             )

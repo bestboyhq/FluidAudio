@@ -3,7 +3,7 @@ import Foundation
 extension AsrManager {
 
     internal func transcribeWithState(
-        _ audioSamples: [Float], decoderState: inout TdtDecoderState, language: Language? = nil
+        _ audioSamples: [Float], decoderState: inout TdtDecoderState, languages: Set<Language> = []
     ) async throws -> ASRResult {
         guard isAvailable else { throw ASRError.notInitialized }
         let minimumRequiredSamples = ASRConstants.minimumRequiredSamples(forSampleRate: config.sampleRate)
@@ -21,7 +21,7 @@ extension AsrManager {
                 actualAudioFrames: nil,  // Will be calculated from originalLength
                 decoderState: &decoderState,
                 isLastChunk: true,  // Single-chunk: always first and last
-                language: language
+                languages: languages
             )
 
             let result = processTranscriptionResult(
@@ -46,7 +46,7 @@ extension AsrManager {
                 guard let self else { return }
                 await self.progressEmitter.report(progress: progress)
             },
-            language: language
+            languages: languages
         )
 
         return result
@@ -440,7 +440,7 @@ extension AsrManager {
         previousTokenTimestamps: [Int]? = nil,
         globalFrameOffset: Int = 0,
         isLastChunk: Bool = false,
-        language: Language? = nil
+        languages: Set<Language> = []
     ) async throws -> (
         tokens: [Int], timestamps: [Int], confidences: [Float], encoderSequenceLength: Int,
         droppedPreviousTokens: Int
@@ -483,7 +483,7 @@ extension AsrManager {
             decoderState: &decoderState,
             contextFrameAdjustment: 0,  // Non-streaming chunks don't use adaptive context
             isLastChunk: isLastChunk,
-            language: language,
+            languages: languages,
             emitTokensAfterGlobalFrame: redecodePlan.emitTokensAfterFrame,
             initialTimeIndexOverride: redecodePlan.initialTimeIndexOverride
         )

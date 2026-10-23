@@ -739,7 +739,7 @@ struct ChunkProcessor {
         using manager: AsrManager,
         startTime: Date,
         progressHandler: ((Double) async -> Void)? = nil,
-        language: Language? = nil
+        languages: Set<Language> = []
     ) async throws -> ASRResult {
         let requestedConcurrency = max(1, await manager.parallelChunkConcurrency)
         let workers = await makeWorkerPool(using: manager, count: requestedConcurrency) ?? [manager]
@@ -762,7 +762,7 @@ struct ChunkProcessor {
                 modelVersion: modelVersion,
                 startTime: startTime,
                 progressHandler: progressHandler,
-                language: language
+                languages: languages
             )
         }
 
@@ -854,7 +854,7 @@ struct ChunkProcessor {
                             using: worker,
                             decoderState: &decoderState,
                             maxModelSamples: maxModelSamples,
-                            language: language,
+                            languages: languages,
                             emitTokensAfterFrame: window.emitTokensAfterFrame,
                             initialTimeIndexOverride: window.emitTokensAfterFrame == nil ? nil : 0
                         )
@@ -962,7 +962,7 @@ struct ChunkProcessor {
                 speechRmsThreshold: speechRmsThreshold,
                 spliceSafeTokenIds: spliceSafeTokenIds,
                 vocabulary: vocabulary,
-                language: language
+                languages: languages
             )
         }
 
@@ -1014,7 +1014,7 @@ struct ChunkProcessor {
         using manager: AsrManager,
         decoderState: inout TdtDecoderState,
         maxModelSamples: Int,
-        language: Language? = nil,
+        languages: Set<Language> = [],
         emitTokensAfterFrame: Int? = nil,
         initialTimeIndexOverride: Int? = nil
     ) async throws -> (tokens: [Int], timestamps: [Int], confidences: [Float], durations: [Int]) {
@@ -1040,7 +1040,7 @@ struct ChunkProcessor {
             contextFrameAdjustment: contextFrames,  // Skip context frames in decoder
             isLastChunk: isLastChunk,
             globalFrameOffset: globalFrameOffset,
-            language: language,
+            languages: languages,
             emitTokensAfterGlobalFrame: emitTokensAfterFrame,
             initialTimeIndexOverride: initialTimeIndexOverride
         )
@@ -1713,7 +1713,7 @@ struct ChunkProcessor {
         speechRmsThreshold: Float,
         spliceSafeTokenIds: Set<Int>?,
         vocabulary: [Int: String],
-        language: Language?
+        languages: Set<Language>
     ) async throws -> [TokenWindow] {
         let frameSamples = ASRConstants.samplesPerEncoderFrame
         let frameDuration = ASRConstants.secondsPerEncoderFrame
@@ -1805,7 +1805,7 @@ struct ChunkProcessor {
                             maxModelSamples: maxModelSamples,
                             spliceSafeTokenIds: spliceSafeTokenIds,
                             vocabulary: vocabulary,
-                            language: language
+                            languages: languages
                         )
                         return (probeIndex, workerIndex, recovered)
                     }
@@ -1842,7 +1842,7 @@ struct ChunkProcessor {
         maxModelSamples: Int,
         spliceSafeTokenIds: Set<Int>?,
         vocabulary: [Int: String],
-        language: Language?
+        languages: Set<Language>
     ) async throws -> [TokenWindow] {
         for placement in probe.placements {
             var decoderState = TdtDecoderState.make(decoderLayers: decoderLayers)
@@ -1856,7 +1856,7 @@ struct ChunkProcessor {
                     using: manager,
                     decoderState: &decoderState,
                     maxModelSamples: maxModelSamples,
-                    language: language
+                    languages: languages
                 )
 
             guard windowTokens.count == windowTimestamps.count,
